@@ -10,8 +10,8 @@ import { generateAnswer, generateAnswerStream } from './generator.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const DATA_FILE = path.join(__dirname, '..', '..', 'chatbot_data.md');
-const INDEX_FILE = path.join(__dirname, '..', '..', 'vector_index.json');
+const DATA_FILE = path.join(process.cwd(), 'chatbot_data.md');
+const INDEX_FILE = path.join(process.cwd(), 'vector_index.json');
 const AUTO_REBUILD_ON_START = process.env.RAG_AUTO_REBUILD_ON_START === 'true';
 // Increased from 2 to 5 for much richer context
 const MAX_RETRIEVED_CHUNKS = Math.max(1, Number.parseInt(process.env.RAG_RETRIEVAL_CHUNKS || '5', 10) || 5);

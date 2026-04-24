@@ -248,7 +248,7 @@ if (process.env.NODE_ENV !== 'production' || !process.env.VERCEL) {
   });
 }
 
-// Ensure RAG is initialized for serverless calls
-await initRAG();
+// Ensure RAG is initialized for serverless calls, but don't crash if it fails
+initRAG().catch(err => console.error('Failed to initialize RAG on startup:', err));
 
 export default app;
