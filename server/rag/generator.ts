@@ -148,15 +148,24 @@ ${contextStr || 'لا توجد معلومات محددة مسترجعة لهذا
 8. فهم النية وراء الكلام مش بس الكلمات، فلو قال "عايز أفتح مشروع" يعني محتاج دراسة جدوى واستشارة.
 `.trim();
 
-// Mode: 'chat' for text chatbot, 'voice' for voice agent (كريم)
+// Model hierarchy for fallback
+const MODEL_HIERARCHY = [
+    process.env.CHAT_MODEL || 'gemini-2.5-flash',
+    'gemini-3.1-flash-lite-preview', // The new "Lite" model
+    'gemini-3-flash-preview'        // The new "Pro" model
+];
+
+const API_KEYS = [
+    process.env.CHATBOT_API_KEY || process.env.GEMINI_API_KEY || '',
+    process.env.BACKUP_API_KEY || ''
+].filter(k => k !== '');
+
 export const generateAnswer = async (
     query: string,
     retrievedChunks: ChunkMetadata[],
     history: any[],
     mode: 'chat' | 'voice' = 'chat'
 ) => {
-    const ai = getClient();
-
     let contextStr = '';
     if (retrievedChunks.length > 0) {
         contextStr = retrievedChunks.map((c, i) =>
@@ -169,36 +178,54 @@ export const generateAnswer = async (
         : buildChatSystemInstruction(contextStr);
 
     const maxTokens = mode === 'voice' ? VOICE_MAX_TOKENS : CHAT_MAX_TOKENS;
-    const model = mode === 'voice' ? VOICE_MODEL : CHAT_MODEL;
-
-    // Build history excluding the last user message (we append it separately)
     const historyWithoutLast = history.filter((_, i) => i < history.length - 1);
-
     const formattedHistory = [
         ...historyWithoutLast,
         { role: 'user', parts: [{ text: query }] }
     ];
 
-    try {
-        const response = await ai.models.generateContent({
-            model,
-            contents: formattedHistory,
-            config: {
-                systemInstruction,
-                maxOutputTokens: maxTokens,
-                temperature: mode === 'voice' ? 0.5 : 0.35,
-                topP: 0.92,
-                topK: 40,
-            },
-        });
+    // Double loop: Try each API key, and for each key try the model hierarchy
+    for (const apiKey of API_KEYS) {
+        const ai = new GoogleGenAI({ apiKey });
 
-        return response.text?.trim() || 'عذراً، هنالك خطأ أثناء جلب الرد.';
-    } catch (err) {
-        console.error('Error in answer generation:', err);
-        return mode === 'voice'
-            ? 'عذراً يا فندم، فيه مشكلة في الاتصال دلوقتي. ممكن تحاول تاني بعد شوية؟'
-            : 'عذراً، واجهنا مشكلة مؤقتة في الاتصال. من فضلك حاول مرة أخرى بعد لحظات.';
+        for (const modelName of MODEL_HIERARCHY) {
+            try {
+                console.log(`🤖 Model: ${modelName} | Key: ${apiKey.slice(0, 8)}...`);
+                const response = await ai.models.generateContent({
+                    model: modelName,
+                    contents: formattedHistory,
+                    config: {
+                        systemInstruction,
+                        maxOutputTokens: maxTokens,
+                        temperature: mode === 'voice' ? 0.5 : 0.35,
+                        topP: 0.92,
+                        topK: 40,
+                    },
+                });
+
+                if (response.text) {
+                    return response.text.trim();
+                }
+            } catch (err: any) {
+                const errMsg = err.message || '';
+                console.error(`⚠️ Failed (${modelName}):`, errMsg.slice(0, 100));
+
+                // If it's a quota, auth, or server overload error, we should try the next API key
+                const isFatalKeyError = errMsg.includes('429') || errMsg.includes('403') || errMsg.includes('503') || errMsg.includes('API_KEY_INVALID');
+                
+                if (isFatalKeyError && apiKey !== API_KEYS[API_KEYS.length - 1]) {
+                    console.log('🔄 Quota hit or Key error. Switching to next API Key...');
+                    break; // Break the model loop to try the next API key
+                }
+
+                // If it's the last model AND last key, throw
+                if (modelName === MODEL_HIERARCHY[MODEL_HIERARCHY.length - 1] && apiKey === API_KEYS[API_KEYS.length - 1]) {
+                    throw err;
+                }
+            }
+        }
     }
+    return 'عذراً، واجهنا مشكلة في معالجة الرد حالياً.';
 };
 
 export const generateAnswerStream = async function* (
