@@ -1,0 +1,5 @@
+{
+  "name": "Wedad - Voice AI Friend",
+  "description": "A warm, empathetic Egyptian Voice AI assistant for women.",
+  "requestFramePermissions": ["microphone"]
+}
