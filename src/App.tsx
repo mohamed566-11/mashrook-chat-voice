@@ -6,6 +6,8 @@ import { WelcomeScreen } from './components/WelcomeScreen';
 import VoiceChat from './VoiceChat';
 import { DashboardLayout } from './components/DashboardLayout';
 import { ChevronLeft, ShieldCheck, Globe, Star } from 'lucide-react';
+import { MobileLayout } from './mobile/MobileLayout';
+import { MobileLanding } from './mobile/MobileLanding';
 
 type View = 'landing' | 'chat' | 'voice';
 
@@ -17,6 +19,13 @@ function App() {
   const [isInitializing, setIsInitializing] = useState(true);
   const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
+  const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
+
+  useEffect(() => {
+    const handleResize = () => setIsMobile(window.innerWidth < 768);
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   useEffect(() => {
     if (token) validateToken(token);
@@ -114,6 +123,50 @@ function App() {
             </motion.div>
           </div>
         </div>
+      );
+    }
+
+    if (isMobile) {
+      return (
+        <MobileLayout
+          user={user}
+          currentView={currentView}
+          onNavigate={(view) => {
+            if (view === 'chat' && !activeConversationId) {
+              handleNewChat();
+            } else {
+              setCurrentView(view);
+            }
+          }}
+          onLogout={handleLogout}
+        >
+          <AnimatePresence mode="wait">
+            {currentView === 'landing' && (
+              <motion.div key="landing" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }} className="w-full h-full absolute inset-0">
+                <MobileLanding user={user} onNavigate={(view) => {
+                  if (view === 'chat') handleNewChat();
+                  else setCurrentView(view);
+                }} />
+              </motion.div>
+            )}
+            {currentView === 'chat' && activeConversationId && (
+              <motion.div key="chat" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} transition={{ duration: 0.2 }} className="w-full h-full absolute inset-0 bg-white">
+                <ChatBot
+                  token={token}
+                  user={user}
+                  conversationId={activeConversationId}
+                  onBack={() => setCurrentView('landing')}
+                  onMessageSent={handleMessageSent}
+                />
+              </motion.div>
+            )}
+            {currentView === 'voice' && (
+              <motion.div key="voice" initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} transition={{ duration: 0.2 }} className="w-full h-full absolute inset-0 bg-[#0A1A2F]">
+                <VoiceChat onBack={() => setCurrentView('landing')} />
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </MobileLayout>
       );
     }
 
