@@ -11,7 +11,9 @@ interface Message {
   isError?: boolean;
 }
 
-const API_BASE = `http://${window.location.hostname}:3001`;
+const API_BASE = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+  ? `http://${window.location.hostname}:3001`
+  : ''; // Relative to the same domain on Vercel
 
 interface ChatBotProps {
   token: string;

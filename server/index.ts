@@ -238,8 +238,17 @@ app.delete('/api/chat/:id', authenticate, async (req: any, res) => {
 
 // ─── Start ───────────────────────────────────────────────────────────────────
 
-const PORT = 3001;
-app.listen(PORT, async () => {
-  console.log(`🚀 Server on ${PORT}`);
-  await initRAG();
-});
+const PORT = process.env.PORT || 3001;
+
+// Only listen if not running as a Vercel function
+if (process.env.NODE_ENV !== 'production' || !process.env.VERCEL) {
+  app.listen(PORT, async () => {
+    console.log(`🚀 Server on ${PORT}`);
+    await initRAG();
+  });
+}
+
+// Ensure RAG is initialized for serverless calls
+await initRAG();
+
+export default app;
