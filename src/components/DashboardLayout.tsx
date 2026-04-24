@@ -2,7 +2,9 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Plus, MessageSquare, Menu, LogOut, Trash2, PanelRightClose, PanelRightOpen, Loader2, Bot, ArrowRight } from 'lucide-react';
 
-const API_BASE = `http://${window.location.hostname}:3001`;
+const API_BASE = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+  ? `http://${window.location.hostname}:3001`
+  : '';
 
 interface HistoryItem {
   conversationId: string;

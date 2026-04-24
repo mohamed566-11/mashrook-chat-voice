@@ -25,7 +25,10 @@ function App() {
 
   const validateToken = async (t: string) => {
     try {
-      const res = await fetch(`http://${window.location.hostname}:3001/api/auth/me`, {
+      const API_BASE = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+        ? `http://${window.location.hostname}:3001`
+        : '';
+      const res = await fetch(`${API_BASE}/api/auth/me`, {
         headers: { 'Authorization': `Bearer ${t}` }
       });
       if (res.ok) setUser(await res.json());
