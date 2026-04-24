@@ -155,17 +155,17 @@ const MODEL_HIERARCHY = [
     'gemini-3-flash-preview'        // The new "Pro" model
 ];
 
-const API_KEYS = [
-    process.env.CHATBOT_API_KEY || process.env.GEMINI_API_KEY || '',
-    process.env.BACKUP_API_KEY || ''
-].filter(k => k !== '');
-
 export const generateAnswer = async (
     query: string,
     retrievedChunks: ChunkMetadata[],
     history: any[],
     mode: 'chat' | 'voice' = 'chat'
 ) => {
+    const API_KEYS = [
+        process.env.CHATBOT_API_KEY || process.env.GEMINI_API_KEY || '',
+        process.env.BACKUP_API_KEY || ''
+    ].filter(k => k !== '');
+
     let contextStr = '';
     if (retrievedChunks.length > 0) {
         contextStr = retrievedChunks.map((c, i) =>
