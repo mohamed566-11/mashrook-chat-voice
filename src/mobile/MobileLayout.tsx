@@ -60,7 +60,7 @@ export const MobileLayout: React.FC<MobileLayoutProps> = ({
           />
           
           {/* Voice Chat (Center Prominent Button) */}
-          <div className="relative -top-6">
+          <div className="relative -top-3">
             <button
               onClick={() => onNavigate('voice')}
               className={`w-14 h-14 rounded-full flex items-center justify-center shadow-xl transition-all duration-300 transform active:scale-95 ${

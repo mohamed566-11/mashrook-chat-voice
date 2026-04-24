@@ -19,11 +19,18 @@ function App() {
   const [isInitializing, setIsInitializing] = useState(true);
   const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
-  const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
+  const checkIsMobile = () => {
+    const isMobileAgent = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+    return isMobileAgent || window.innerWidth < 768;
+  };
+
+  const [isMobile, setIsMobile] = useState(checkIsMobile());
 
   useEffect(() => {
-    const handleResize = () => setIsMobile(window.innerWidth < 768);
+    const handleResize = () => setIsMobile(checkIsMobile());
     window.addEventListener('resize', handleResize);
+    // Force a check after a small delay to handle some mobile browsers (like iOS Safari) quirks
+    setTimeout(handleResize, 100);
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
