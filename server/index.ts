@@ -126,9 +126,10 @@ app.get('/api/auth/me', authenticate, async (req: any, res) => {
 // ─── Chat Routes ─────────────────────────────────────────────────────────────
 
 app.post('/api/chat', authenticate, async (req: any, res) => {
+  const startedAt = Date.now();
   try {
     const { message, conversationId = 'default', mode = 'chat', stream = false } = req.body;
-    const userId = req.userId;
+    const { userId } = req;
 
     if (!message) return res.status(400).json({ error: 'الرسالة مطلوبة' });
 
@@ -150,7 +151,9 @@ app.post('/api/chat', authenticate, async (req: any, res) => {
       res.setHeader('Connection', 'keep-alive');
 
       let botMsg = '';
+      let firstChunkAt: number | null = null;
       for await (const piece of answerQueryWithRAGStream(message, history, typedMode)) {
+        if (firstChunkAt === null) firstChunkAt = Date.now();
         botMsg += piece;
         res.write(piece);
       }
@@ -170,6 +173,13 @@ app.post('/api/chat', authenticate, async (req: any, res) => {
       );
 
       res.end();
+      console.log(
+        '[perf][server][chat][stream]',
+        'total(ms)=',
+        Date.now() - startedAt,
+        'first-chunk(ms)=',
+        firstChunkAt ? firstChunkAt - startedAt : 'n/a',
+      );
       return;
     }
 
@@ -192,8 +202,10 @@ app.post('/api/chat', authenticate, async (req: any, res) => {
     );
 
     res.json({ message: botMsg, conversationId });
+    console.log('[perf][server][chat][non-stream]', 'total(ms)=', Date.now() - startedAt);
   } catch (err: any) {
     console.error(err);
+    console.log('[perf][server][chat][error]', 'total(ms)=', Date.now() - startedAt);
     if (!res.headersSent) {
       res.status(500).json({ error: 'خطأ في معالجة الطلب' });
       return;
@@ -246,9 +258,9 @@ if (process.env.NODE_ENV !== 'production' || !process.env.VERCEL) {
     console.log(`🚀 Server on ${PORT}`);
     await initRAG();
   });
+} else {
+  // Initialize once in serverless mode without duplicating local startup work.
+  initRAG().catch(err => console.error('Failed to initialize RAG on startup:', err));
 }
-
-// Ensure RAG is initialized for serverless calls, but don't crash if it fails
-initRAG().catch(err => console.error('Failed to initialize RAG on startup:', err));
 
 export default app;

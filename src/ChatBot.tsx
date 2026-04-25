@@ -36,7 +36,7 @@ const INITIAL_QUICK_REPLIES = [
 // Contextual follow-up suggestions based on last bot response keywords
 const getContextualSuggestions = (lastBotText: string): { text: string; icon: string }[] => {
   const text = lastBotText.toLowerCase();
-  
+
   if (text.includes('جدوى') || text.includes('دراسة')) {
     return [
       { text: 'ما هي تكلفة دراسة الجدوى؟', icon: '💰' },
@@ -74,6 +74,7 @@ export default function ChatBot({ token, user, conversationId, onBack, onMessage
   const [isLoading, setIsLoading] = useState(false);
   const [isLoadingHistory, setIsLoadingHistory] = useState(false);
   const [streamingBotId, setStreamingBotId] = useState<string | null>(null);
+  const [streamingText, setStreamingText] = useState('');
   const [contextualSuggestions, setContextualSuggestions] = useState<{ text: string; icon: string }[]>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -81,6 +82,8 @@ export default function ChatBot({ token, user, conversationId, onBack, onMessage
   const displayedStreamTextRef = useRef('');
   const streamDoneRef = useRef(false);
   const animationFrameRef = useRef<number | null>(null);
+  const lastAutoScrollAtRef = useRef(0);
+  const streamFirstChunkAtRef = useRef<number | null>(null);
 
   const stopStreamAnimator = () => {
     if (animationFrameRef.current !== null) {
@@ -90,24 +93,33 @@ export default function ChatBot({ token, user, conversationId, onBack, onMessage
   };
 
   const updateBotMessageText = useCallback((botMessageId: string, text: string) => {
-    setMessages(prev => prev.map((m) => m.id === botMessageId ? { ...m, text } : m));
+    setMessages(prev => {
+      let changed = false;
+      const next = prev.map((m) => {
+        if (m.id !== botMessageId) return m;
+        if (m.text === text) return m;
+        changed = true;
+        return { ...m, text };
+      });
+      return changed ? next : prev;
+    });
   }, []);
 
   const startStreamAnimator = useCallback((botMessageId: string) => {
     stopStreamAnimator();
 
     let lastRenderAt = 0;
-    const minFrameGap = 28; // ~35fps
+    const minFrameGap = 56; // ~18fps
 
     const tick = (now: number) => {
       if (now - lastRenderAt >= minFrameGap && streamQueueRef.current.length > 0) {
         const queueLength = streamQueueRef.current.length;
         // Adaptive speed: faster when buffer is large
-        const charsPerTick = queueLength > 200 ? 14 : queueLength > 80 ? 8 : queueLength > 30 ? 5 : 3;
+        const charsPerTick = queueLength > 250 ? 32 : queueLength > 120 ? 20 : queueLength > 50 ? 14 : 10;
         const nextPiece = streamQueueRef.current.slice(0, charsPerTick);
         streamQueueRef.current = streamQueueRef.current.slice(charsPerTick);
         displayedStreamTextRef.current += nextPiece;
-        updateBotMessageText(botMessageId, displayedStreamTextRef.current);
+        setStreamingText(displayedStreamTextRef.current);
         lastRenderAt = now;
       }
 
@@ -119,7 +131,7 @@ export default function ChatBot({ token, user, conversationId, onBack, onMessage
     };
 
     animationFrameRef.current = requestAnimationFrame(tick);
-  }, [updateBotMessageText]);
+  }, []);
 
   useEffect(() => {
     loadConversation();
@@ -127,7 +139,15 @@ export default function ChatBot({ token, user, conversationId, onBack, onMessage
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
+  }, [messages.length]);
+
+  useEffect(() => {
+    if (!streamingBotId) return;
+    const now = performance.now();
+    if (now - lastAutoScrollAtRef.current < 180) return;
+    lastAutoScrollAtRef.current = now;
+    messagesEndRef.current?.scrollIntoView({ behavior: 'auto' });
+  }, [streamingText, streamingBotId]);
 
   useEffect(() => {
     inputRef.current?.focus();
@@ -184,6 +204,7 @@ export default function ChatBot({ token, user, conversationId, onBack, onMessage
     const textToSend = typeof directText === 'string' ? directText : input;
     const trimmed = textToSend.trim();
     if (!trimmed || isLoading) return;
+    const requestStartAt = performance.now();
 
     const userMsg: Message = {
       id: `user_${Date.now()}`,
@@ -201,7 +222,9 @@ export default function ChatBot({ token, user, conversationId, onBack, onMessage
     streamQueueRef.current = '';
     displayedStreamTextRef.current = '';
     streamDoneRef.current = false;
+    streamFirstChunkAtRef.current = null;
     setStreamingBotId(botMessageId);
+    setStreamingText('');
     setMessages(prev => [
       ...prev,
       { id: botMessageId, text: '', sender: 'bot', timestamp: new Date() },
@@ -221,6 +244,7 @@ export default function ChatBot({ token, user, conversationId, onBack, onMessage
       if (!res.body) {
         const data = await res.json();
         updateBotMessageText(botMessageId, data.message);
+        console.debug('[perf][chat] non-stream roundtrip(ms):', Math.round(performance.now() - requestStartAt));
         onMessageSent?.();
         return;
       }
@@ -234,6 +258,9 @@ export default function ChatBot({ token, user, conversationId, onBack, onMessage
         if (done) break;
         const chunk = decoder.decode(value, { stream: true });
         if (!chunk) continue;
+        if (streamFirstChunkAtRef.current === null) {
+          streamFirstChunkAtRef.current = performance.now();
+        }
         streamQueueRef.current += chunk;
       }
 
@@ -253,11 +280,23 @@ export default function ChatBot({ token, user, conversationId, onBack, onMessage
       });
 
       if (!displayedStreamTextRef.current.trim()) throw new Error('Empty streamed response');
+      updateBotMessageText(botMessageId, displayedStreamTextRef.current);
+      setStreamingText('');
+      const firstTokenMs = streamFirstChunkAtRef.current === null
+        ? null
+        : Math.round(streamFirstChunkAtRef.current - requestStartAt);
+      console.debug(
+        '[perf][chat] stream total(ms):',
+        Math.round(performance.now() - requestStartAt),
+        'first-token(ms):',
+        firstTokenMs ?? 'n/a'
+      );
       onMessageSent?.();
     } catch {
       stopStreamAnimator();
       streamQueueRef.current = '';
       streamDoneRef.current = true;
+      setStreamingText('');
       setMessages(prev => prev.map((m) => (
         m.id === botMessageId
           ? {
@@ -273,6 +312,7 @@ export default function ChatBot({ token, user, conversationId, onBack, onMessage
       streamQueueRef.current = '';
       streamDoneRef.current = true;
       setStreamingBotId(null);
+      setStreamingText('');
       setIsLoading(false);
     }
   };
@@ -290,7 +330,7 @@ export default function ChatBot({ token, user, conversationId, onBack, onMessage
   const hasError = messages.some(m => m.isError);
 
   return (
-    <div className="flex flex-col h-full relative" style={{ background: 'linear-gradient(160deg, #f0f9f1 0%, #f5f7fa 50%, #eef2ff 100%)' }}>
+    <div className="flex flex-col h-full min-h-0 relative bg-[linear-gradient(160deg,#f0f9f1_0%,#f5f7fa_50%,#eef2ff_100%)]">
       {/* Header */}
       {onBack && (
         <div className="bg-white/90 backdrop-blur-md border-b border-gray-100 p-4 shrink-0 flex items-center justify-between z-10 sticky top-0 shadow-sm" dir="rtl">
@@ -324,7 +364,7 @@ export default function ChatBot({ token, user, conversationId, onBack, onMessage
       )}
 
       {/* Messages Area */}
-      <div className="flex-1 overflow-y-auto px-4 py-6 space-y-4 scrollbar-hide" dir="rtl">
+      <div className="flex-1 min-h-0 overflow-y-auto px-4 pt-5 pb-3 space-y-4 scrollbar-hide" dir="rtl">
         {isLoadingHistory ? (
           <div className="flex flex-col items-center justify-center h-full py-20">
             <div className="w-12 h-12 rounded-2xl bg-[#3a9d47]/10 flex items-center justify-center mb-4">
@@ -351,16 +391,15 @@ export default function ChatBot({ token, user, conversationId, onBack, onMessage
                   )}
 
                   <div
-                    className={`max-w-[82%] px-5 py-3.5 rounded-2xl text-[14.5px] leading-relaxed transition-all duration-300 ${
-                      msg.sender === 'user'
+                    className={`max-w-[88%] px-5 py-3.5 rounded-2xl text-[14.5px] leading-relaxed transition-all duration-300 ${msg.sender === 'user'
                         ? 'bg-gradient-to-br from-[#3a9d47] to-[#2d8c3e] text-white rounded-tl-sm shadow-md shadow-[#3a9d47]/20 select-text'
                         : msg.isError
                           ? 'bg-red-50 text-red-700 rounded-tr-sm border border-red-100 select-text'
                           : 'bg-white text-[#1e2d3d] rounded-tr-sm border border-gray-100/80 shadow-sm hover:shadow select-text'
-                    }`}
+                      }`}
                   >
                     <div className="prose prose-sm max-w-none text-inherit [&_p]:mb-2 [&_p:last-child]:mb-0 [&_ul]:mt-1 [&_li]:my-0.5 [&_strong]:font-bold">
-                      <ReactMarkdown>{msg.text}</ReactMarkdown>
+                      <ReactMarkdown>{msg.id === streamingBotId ? streamingText : msg.text}</ReactMarkdown>
                       {msg.id === streamingBotId && (
                         <span className="inline-block w-2 h-[1.1em] mr-0.5 align-middle bg-[#3a9d47] opacity-70 animate-pulse rounded-sm" />
                       )}
@@ -409,8 +448,8 @@ export default function ChatBot({ token, user, conversationId, onBack, onMessage
       </div>
 
       {/* Quick Replies & Input Area */}
-      <div className="p-4 bg-white/95 backdrop-blur border-t border-gray-100 shadow-[0_-8px_30px_rgba(0,0,0,0.04)]" dir="rtl">
-        
+      <div className="px-4 pt-3 pb-[max(0.9rem,env(safe-area-inset-bottom))] bg-white/95 backdrop-blur border-t border-gray-100 shadow-[0_-8px_30px_rgba(0,0,0,0.04)]" dir="rtl">
+
         {/* Initial Quick Replies */}
         <AnimatePresence>
           {showInitialReplies && (

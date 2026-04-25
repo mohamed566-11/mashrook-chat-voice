@@ -30,15 +30,17 @@ const VOICE_ASSISTANT_SYSTEM_PROMPT = `أنتَ "مساعدك الصوتى"، م
 function MashrookBlob({
   isConnected,
   isSpeaking,
+  reduceMotion,
 }: {
   isConnected: boolean;
   isSpeaking: boolean;
+  reduceMotion: boolean;
 }) {
   return (
     <div className="relative w-72 h-72 flex items-center justify-center">
       {/* Outer glow ring when speaking */}
       <AnimatePresence>
-        {isSpeaking && (
+        {isSpeaking && !reduceMotion && (
           <motion.div
             key="glow"
             initial={{ opacity: 0, scale: 0.85 }}
@@ -59,27 +61,35 @@ function MashrookBlob({
           height: 250,
           borderColor: isConnected ? 'rgba(58,157,71,0.35)' : 'rgba(0,0,0,0.08)',
         }}
-        animate={isConnected ? { scale: [1, 1.04, 1], opacity: [0.35, 0.6, 0.35] } : {}}
-        transition={{ duration: 3, repeat: Infinity, ease: 'easeInOut' }}
+        animate={!reduceMotion && isConnected ? { scale: [1, 1.04, 1], opacity: [0.35, 0.6, 0.35] } : {}}
+        transition={reduceMotion ? { duration: 0 } : { duration: 3, repeat: Infinity, ease: 'easeInOut' }}
       />
 
       {/* The morphing blob */}
       <motion.div
-        animate={{
-          borderRadius: isConnected
-            ? [
-              '60% 40% 30% 70%/60% 30% 70% 40%',
-              '40% 60% 70% 30%/50% 60% 40% 60%',
-              '30% 70% 50% 50%/30% 50% 70% 50%',
-              '60% 40% 30% 70%/60% 30% 70% 40%',
-            ]
-            : '50%',
-          scale: isSpeaking ? [1, 1.07, 1] : isConnected ? [1, 1.02, 1] : 1,
-        }}
-        transition={{
-          borderRadius: { duration: 8, repeat: Infinity, ease: 'easeInOut' },
-          scale: { duration: isSpeaking ? 0.6 : 3, repeat: Infinity, ease: 'easeInOut' },
-        }}
+        animate={
+          reduceMotion
+            ? { borderRadius: '50%', scale: 1 }
+            : {
+              borderRadius: isConnected
+                ? [
+                  '60% 40% 30% 70%/60% 30% 70% 40%',
+                  '40% 60% 70% 30%/50% 60% 40% 60%',
+                  '30% 70% 50% 50%/30% 50% 70% 50%',
+                  '60% 40% 30% 70%/60% 30% 70% 40%',
+                ]
+                : '50%',
+              scale: isSpeaking ? [1, 1.07, 1] : isConnected ? [1, 1.02, 1] : 1,
+            }
+        }
+        transition={
+          reduceMotion
+            ? { duration: 0 }
+            : {
+              borderRadius: { duration: 8, repeat: Infinity, ease: 'easeInOut' },
+              scale: { duration: isSpeaking ? 0.6 : 3, repeat: Infinity, ease: 'easeInOut' },
+            }
+        }
         className="relative w-52 h-52 flex items-center justify-center overflow-hidden shadow-2xl"
         style={{
           background: isConnected
@@ -108,16 +118,22 @@ function MashrookBlob({
                 className="rounded-full bg-white"
                 style={{ width: 4 }}
                 animate={
-                  isSpeaking
-                    ? { height: [8, 20 + Math.random() * 24, 8] }
-                    : { height: [6, 14, 6] }
+                  reduceMotion
+                    ? { height: isSpeaking ? 14 + ((i * 7) % 16) : 8 }
+                    : isSpeaking
+                      ? { height: [8, 20 + ((i * 9) % 18), 8] }
+                      : { height: [6, 14, 6] }
                 }
-                transition={{
-                  duration: isSpeaking ? 0.3 + (i % 3) * 0.1 : 1.2,
-                  delay: i * 0.06,
-                  repeat: Infinity,
-                  ease: 'easeInOut',
-                }}
+                transition={
+                  reduceMotion
+                    ? { duration: 0.15 }
+                    : {
+                      duration: isSpeaking ? 0.3 + (i % 3) * 0.1 : 1.2,
+                      delay: i * 0.06,
+                      repeat: Infinity,
+                      ease: 'easeInOut',
+                    }
+                }
               />
             ))}
           </div>
@@ -140,6 +156,7 @@ export default function VoiceChat({ onBack }: { onBack: () => void }) {
   const [isConnected, setIsConnected] = useState(false);
   const [isConnecting, setIsConnecting] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
+  const [reduceMotion, setReduceMotion] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const sessionRef = useRef<any>(null);
@@ -151,10 +168,37 @@ export default function VoiceChat({ onBack }: { onBack: () => void }) {
     return () => { disconnect(); };
   }, []);
 
+  useEffect(() => {
+    const mediaQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
+    const updateMotionPreference = () => {
+      setReduceMotion(mediaQuery.matches || window.innerWidth < 768);
+    };
+
+    updateMotionPreference();
+
+    if (mediaQuery.addEventListener) {
+      mediaQuery.addEventListener('change', updateMotionPreference);
+    } else {
+      mediaQuery.addListener(updateMotionPreference);
+    }
+
+    window.addEventListener('resize', updateMotionPreference);
+
+    return () => {
+      if (mediaQuery.removeEventListener) {
+        mediaQuery.removeEventListener('change', updateMotionPreference);
+      } else {
+        mediaQuery.removeListener(updateMotionPreference);
+      }
+      window.removeEventListener('resize', updateMotionPreference);
+    };
+  }, []);
+
   // ── Connect to Gemini Live ─────────────────────────────────────────────
   const connect = async () => {
     setError(null);
     setIsConnecting(true);
+    const connectStartedAt = performance.now();
 
     try {
       const isSecureOrigin =
@@ -186,6 +230,7 @@ export default function VoiceChat({ onBack }: { onBack: () => void }) {
           onopen: async () => {
             setIsConnected(true);
             setIsConnecting(false);
+            console.debug('[perf][voice] connected in(ms):', Math.round(performance.now() - connectStartedAt));
 
             // Start streaming microphone to Gemini
             try {
@@ -243,6 +288,7 @@ export default function VoiceChat({ onBack }: { onBack: () => void }) {
       sessionRef.current = await sessionPromise;
     } catch (err: any) {
       console.error('Connection failed:', err);
+      console.debug('[perf][voice] connection failed after(ms):', Math.round(performance.now() - connectStartedAt));
       setError(err.message || 'فشل الاتصال، تأكد من الإنترنت وحاول مرة تانية.');
       setIsConnecting(false);
     }
@@ -286,14 +332,14 @@ export default function VoiceChat({ onBack }: { onBack: () => void }) {
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
         <motion.div
           className="absolute -top-[20%] -right-[15%] w-[65vw] h-[65vw] rounded-full blur-3xl"
-          animate={{ scale: [1, 1.15, 1], opacity: [0.12, 0.22, 0.12], rotate: [0, 60, 0] }}
-          transition={{ duration: 18, repeat: Infinity, ease: 'linear' }}
+          animate={reduceMotion ? { opacity: 0.12 } : { scale: [1, 1.15, 1], opacity: [0.12, 0.22, 0.12], rotate: [0, 60, 0] }}
+          transition={reduceMotion ? { duration: 0 } : { duration: 18, repeat: Infinity, ease: 'linear' }}
           style={{ background: 'radial-gradient(circle, rgba(30,93,38,0.25) 0%, transparent 70%)' }}
         />
         <motion.div
           className="absolute -bottom-[20%] -left-[15%] w-[60vw] h-[60vw] rounded-full blur-3xl"
-          animate={{ scale: [1, 1.2, 1], opacity: [0.08, 0.18, 0.08], rotate: [0, -60, 0] }}
-          transition={{ duration: 22, repeat: Infinity, ease: 'linear', delay: 4 }}
+          animate={reduceMotion ? { opacity: 0.08 } : { scale: [1, 1.2, 1], opacity: [0.08, 0.18, 0.08], rotate: [0, -60, 0] }}
+          transition={reduceMotion ? { duration: 0 } : { duration: 22, repeat: Infinity, ease: 'linear', delay: 4 }}
           style={{ background: 'radial-gradient(circle, rgba(58,157,71,0.2) 0%, transparent 70%)' }}
         />
         {/* Subtle dot grid */}
@@ -327,8 +373,8 @@ export default function VoiceChat({ onBack }: { onBack: () => void }) {
             <motion.div
               className="w-2.5 h-2.5 rounded-full"
               style={{ background: isConnected ? '#3a9d47' : '#d4d4d4' }}
-              animate={isConnected ? { scale: [1, 1.35, 1], opacity: [1, 0.6, 1] } : {}}
-              transition={{ duration: 1.4, repeat: Infinity }}
+              animate={isConnected && !reduceMotion ? { scale: [1, 1.35, 1], opacity: [1, 0.6, 1] } : {}}
+              transition={reduceMotion ? { duration: 0 } : { duration: 1.4, repeat: Infinity }}
             />
             <span className="hidden sm:inline-block text-[10px] font-black uppercase tracking-[0.25em] text-gray-400">
               {isConnected ? 'Live Session' : 'Voice Consultancy'}
@@ -358,7 +404,7 @@ export default function VoiceChat({ onBack }: { onBack: () => void }) {
 
         {/* Blob / Visualizer */}
         <div className="mb-10">
-          <MashrookBlob isConnected={isConnected} isSpeaking={isSpeaking} />
+          <MashrookBlob isConnected={isConnected} isSpeaking={isSpeaking} reduceMotion={reduceMotion} />
         </div>
 
         {/* Status label */}

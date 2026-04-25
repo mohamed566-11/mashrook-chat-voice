@@ -1,9 +1,7 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, lazy, Suspense } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import ChatBot from './ChatBot';
 import { AuthModal } from './components/AuthModal';
 import { WelcomeScreen } from './components/WelcomeScreen';
-import VoiceChat from './VoiceChat';
 import { DashboardLayout } from './components/DashboardLayout';
 import { ChevronLeft, ShieldCheck, Globe, Star } from 'lucide-react';
 import { MobileLayout } from './mobile/MobileLayout';
@@ -12,6 +10,20 @@ import { MobileMainLanding } from './mobile/MobileMainLanding';
 import { MobileAuthModal } from './mobile/MobileAuthModal';
 
 type View = 'landing' | 'chat' | 'voice';
+
+const ChatBot = lazy(() => import('./ChatBot'));
+const VoiceChat = lazy(() => import('./VoiceChat'));
+
+const ViewLoader = ({ label = 'جاري التحميل...' }: { label?: string }) => (
+  <div className="w-full h-full flex flex-col items-center justify-center bg-white/80" dir="rtl">
+    <motion.div
+      animate={{ rotate: 360 }}
+      transition={{ repeat: Infinity, duration: 1, ease: 'linear' }}
+      className="w-9 h-9 border-4 border-[#3a9d47]/20 border-t-[#3a9d47] rounded-full"
+    />
+    <p className="mt-3 text-xs font-bold text-gray-500">{label}</p>
+  </div>
+);
 
 function App() {
   const [token, setToken] = useState<string | null>(localStorage.getItem('mashrouak_token'));
@@ -164,18 +176,22 @@ function App() {
             )}
             {currentView === 'chat' && activeConversationId && (
               <motion.div key="chat" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} transition={{ duration: 0.2 }} className="w-full h-full absolute inset-0 bg-white">
-                <ChatBot
-                  token={token}
-                  user={user}
-                  conversationId={activeConversationId}
-                  onBack={() => setCurrentView('landing')}
-                  onMessageSent={handleMessageSent}
-                />
+                <Suspense fallback={<ViewLoader label="جاري تحميل المحادثة..." />}>
+                  <ChatBot
+                    token={token}
+                    user={user}
+                    conversationId={activeConversationId}
+                    onBack={() => setCurrentView('landing')}
+                    onMessageSent={handleMessageSent}
+                  />
+                </Suspense>
               </motion.div>
             )}
             {currentView === 'voice' && (
               <motion.div key="voice" initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} transition={{ duration: 0.2 }} className="w-full h-full absolute inset-0 bg-[#0A1A2F]">
-                <VoiceChat onBack={() => setCurrentView('landing')} />
+                <Suspense fallback={<ViewLoader label="جاري تجهيز المساعد الصوتي..." />}>
+                  <VoiceChat onBack={() => setCurrentView('landing')} />
+                </Suspense>
               </motion.div>
             )}
           </AnimatePresence>
@@ -205,13 +221,15 @@ function App() {
               transition={{ duration: 0.3, ease: "easeOut" }}
               className="w-full h-full absolute inset-0"
             >
-              <ChatBot
-                token={token}
-                user={user}
-                conversationId={activeConversationId}
-                onBack={() => setCurrentView('landing')}
-                onMessageSent={handleMessageSent}
-              />
+              <Suspense fallback={<ViewLoader label="جاري تحميل المحادثة..." />}>
+                <ChatBot
+                  token={token}
+                  user={user}
+                  conversationId={activeConversationId}
+                  onBack={() => setCurrentView('landing')}
+                  onMessageSent={handleMessageSent}
+                />
+              </Suspense>
             </motion.div>
           )}
           {currentView === 'voice' && (
@@ -223,7 +241,9 @@ function App() {
               transition={{ duration: 0.3, ease: "easeOut" }}
               className="w-full h-full absolute inset-0"
             >
-              <VoiceChat onBack={() => setCurrentView('landing')} />
+              <Suspense fallback={<ViewLoader label="جاري تجهيز المساعد الصوتي..." />}>
+                <VoiceChat onBack={() => setCurrentView('landing')} />
+              </Suspense>
             </motion.div>
           )}
           {currentView === 'landing' && (
