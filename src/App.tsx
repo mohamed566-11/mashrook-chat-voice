@@ -8,6 +8,8 @@ import { DashboardLayout } from './components/DashboardLayout';
 import { ChevronLeft, ShieldCheck, Globe, Star } from 'lucide-react';
 import { MobileLayout } from './mobile/MobileLayout';
 import { MobileLanding } from './mobile/MobileLanding';
+import { MobileMainLanding } from './mobile/MobileMainLanding';
+import { MobileAuthModal } from './mobile/MobileAuthModal';
 
 type View = 'landing' | 'chat' | 'voice';
 
@@ -100,6 +102,10 @@ function App() {
 
   const renderContent = () => {
     if (!token || !user) {
+      if (isMobile) {
+        return <MobileMainLanding onStart={() => setShowAuth(true)} />;
+      }
+
       return (
         <div className="relative min-h-screen w-full flex flex-col items-center overflow-x-hidden overflow-y-auto bg-white pt-20 pb-20" dir="rtl">
           <div className="mesh-bg" />
@@ -247,7 +253,11 @@ function App() {
     <div className="min-h-screen bg-white">
       {renderContent()}
       <AnimatePresence>
-        {showAuth && <AuthModal onSuccess={handleLoginSuccess} onClose={() => setShowAuth(false)} />}
+        {showAuth && (
+          isMobile 
+            ? <MobileAuthModal onSuccess={handleLoginSuccess} onClose={() => setShowAuth(false)} />
+            : <AuthModal onSuccess={handleLoginSuccess} onClose={() => setShowAuth(false)} />
+        )}
       </AnimatePresence>
     </div>
   );
