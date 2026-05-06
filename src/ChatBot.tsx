@@ -392,10 +392,10 @@ export default function ChatBot({ token, user, conversationId, onBack, onMessage
 
                   <div
                     className={`max-w-[88%] px-5 py-3.5 rounded-2xl text-[14.5px] leading-relaxed transition-all duration-300 ${msg.sender === 'user'
-                        ? 'bg-gradient-to-br from-[#3a9d47] to-[#2d8c3e] text-white rounded-tl-sm shadow-md shadow-[#3a9d47]/20 select-text'
-                        : msg.isError
-                          ? 'bg-red-50 text-red-700 rounded-tr-sm border border-red-100 select-text'
-                          : 'bg-white text-[#1e2d3d] rounded-tr-sm border border-gray-100/80 shadow-sm hover:shadow select-text'
+                      ? 'bg-gradient-to-br from-[#3a9d47] to-[#2d8c3e] text-white rounded-tl-sm shadow-md shadow-[#3a9d47]/20 select-text'
+                      : msg.isError
+                        ? 'bg-red-50 text-red-700 rounded-tr-sm border border-red-100 select-text'
+                        : 'bg-white text-[#1e2d3d] rounded-tr-sm border border-gray-100/80 shadow-sm hover:shadow select-text'
                       }`}
                   >
                     <div className="prose prose-sm max-w-none text-inherit [&_p]:mb-2 [&_p:last-child]:mb-0 [&_ul]:mt-1 [&_li]:my-0.5 [&_strong]:font-bold">

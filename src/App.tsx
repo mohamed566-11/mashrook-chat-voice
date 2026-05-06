@@ -274,7 +274,7 @@ function App() {
       {renderContent()}
       <AnimatePresence>
         {showAuth && (
-          isMobile 
+          isMobile
             ? <MobileAuthModal onSuccess={handleLoginSuccess} onClose={() => setShowAuth(false)} />
             : <AuthModal onSuccess={handleLoginSuccess} onClose={() => setShowAuth(false)} />
         )}
